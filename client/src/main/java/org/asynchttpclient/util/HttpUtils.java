@@ -13,9 +13,8 @@
 package org.asynchttpclient.util;
 
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
-import static org.asynchttpclient.util.MiscUtils.*;
+import static org.asynchttpclient.util.MiscUtils.isNonEmpty;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.List;
@@ -30,9 +29,6 @@ import org.asynchttpclient.uri.Uri;
  */
 public class HttpUtils {
 
-    public static final IOException REMOTELY_CLOSED_EXCEPTION = buildStaticIOException("Remotely closed");
-    public static final IOException CHANNEL_CLOSED_EXCEPTION = buildStaticIOException("Channel closed");
-
     public final static Charset DEFAULT_CHARSET = ISO_8859_1;
 
     public static final void validateSupportedScheme(Uri uri) {
@@ -43,12 +39,12 @@ public class HttpUtils {
     }
 
     public final static String getBaseUrl(Uri uri) {
-        return uri.getScheme() + "://" + getAuthority(uri);
+        // getAuthority duplicate but we don't want to re-concatenate
+        return uri.getScheme() + "://" + uri.getHost() + ":" + uri.getExplicitPort();
     }
 
     public final static String getAuthority(Uri uri) {
-        int port = uri.getPort() != -1 ? uri.getPort() : uri.getExplicitPort();
-        return uri.getHost() + ":" + port;
+        return uri.getHost() + ":" + uri.getExplicitPort();
     }
 
     public final static boolean isSameBase(Uri uri1, Uri uri2) {

@@ -23,10 +23,9 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.Collection;
 import java.util.List;
 
-import org.asynchttpclient.channel.pool.ConnectionPoolPartitioning;
+import org.asynchttpclient.channel.ChannelPoolPartitioning;
 import org.asynchttpclient.cookie.Cookie;
 import org.asynchttpclient.proxy.ProxyServer;
 import org.asynchttpclient.request.body.generator.BodyGenerator;
@@ -74,11 +73,11 @@ public interface Request {
     HttpHeaders getHeaders();
 
     /**
-     * Return Coookie.
+     * Return cookies.
      *
      * @return an unmodifiable Collection of Cookies
      */
-    Collection<Cookie> getCookies();
+    List<Cookie> getCookies();
 
     /**
      * Return the current request's body as a byte array
@@ -203,7 +202,7 @@ public interface Request {
      */
     Charset getCharset();
 
-    ConnectionPoolPartitioning getConnectionPoolPartitioning();
+    ChannelPoolPartitioning getChannelPoolPartitioning();
 
     NameResolver getNameResolver();
 }

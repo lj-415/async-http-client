@@ -10,13 +10,13 @@
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the Apache License Version 2.0 for the specific language governing permissions and limitations there under.
  */
-package org.asynchttpclient.channel.pool;
+package org.asynchttpclient.channel;
 
 import org.asynchttpclient.proxy.ProxyServer;
 import org.asynchttpclient.uri.Uri;
 import org.asynchttpclient.util.HttpUtils;
 
-public interface ConnectionPoolPartitioning {
+public interface ChannelPoolPartitioning {
 
     class ProxyPartitionKey {
         private final String proxyHost;
@@ -44,7 +44,7 @@ public interface ConnectionPoolPartitioning {
 
     Object getPartitionKey(Uri uri, String virtualHost, ProxyServer proxyServer);
 
-    enum PerHostConnectionPoolPartitioning implements ConnectionPoolPartitioning {
+    enum PerHostChannelPoolPartitioning implements ChannelPoolPartitioning {
 
         INSTANCE;
 

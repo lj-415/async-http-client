@@ -11,26 +11,9 @@
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the Apache License Version 2.0 for the specific language governing permissions and limitations there under.
  */
-package org.asynchttpclient.netty;
+package org.asynchttpclient.channel;
 
-import org.asynchttpclient.HttpResponseBodyPart;
+public interface ChannelPoolPartitionSelector {
 
-/**
- * A callback class used when an HTTP response body is received.
- */
-public abstract class NettyResponseBodyPart implements HttpResponseBodyPart {
-
-    private final boolean last;
-
-    public NettyResponseBodyPart(boolean last) {
-        this.last = last;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public boolean isLast() {
-        return last;
-    }
+   boolean select(Object partitionKey); 
 }

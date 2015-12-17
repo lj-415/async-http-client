@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package org.asynchttpclient.channel.pool;
+package org.asynchttpclient.channel;
 
 import static org.asynchttpclient.Dsl.*;
 import static org.asynchttpclient.test.EventCollectingHandler.*;
@@ -37,6 +37,7 @@ import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.ListenableFuture;
 import org.asynchttpclient.RequestBuilder;
 import org.asynchttpclient.Response;
+import org.asynchttpclient.exception.TooManyConnectionsException;
 import org.asynchttpclient.test.EventCollectingHandler;
 import org.testng.annotations.Test;
 
@@ -61,8 +62,8 @@ public class ConnectionPoolTest extends AbstractBasicTest {
         }
     }
 
-    @Test(groups = "standalone")
-    public void testMaxTotalConnectionsException() throws IOException {
+    @Test(groups = "standalone", expectedExceptions = TooManyConnectionsException.class)
+    public void testMaxTotalConnectionsException() throws Throwable {
         try (AsyncHttpClient client = asyncHttpClient(config().setKeepAlive(true).setMaxConnections(1))) {
             String url = getTargetUrl();
 
@@ -83,8 +84,7 @@ public class ConnectionPoolTest extends AbstractBasicTest {
             }
 
             assertNotNull(exception);
-            assertNotNull(exception.getCause());
-            assertEquals(exception.getCause().getMessage(), "Too many connections 1");
+            throw exception.getCause();
         }
     }
 
@@ -124,8 +124,8 @@ public class ConnectionPoolTest extends AbstractBasicTest {
         }
     }
 
-    @Test(groups = "standalone")
-    public void multipleMaxConnectionOpenTest() throws Exception {
+    @Test(groups = "standalone", expectedExceptions = TooManyConnectionsException.class)
+    public void multipleMaxConnectionOpenTest() throws Throwable {
         try (AsyncHttpClient c = asyncHttpClient(config().setKeepAlive(true).setConnectTimeout(5000).setMaxConnections(1))) {
             String body = "hello there";
 
@@ -137,15 +137,14 @@ public class ConnectionPoolTest extends AbstractBasicTest {
             // twice
             Exception exception = null;
             try {
-                c.preparePost(String.format("http://127.0.0.1:%d/foo/test", port2)).setBody(body).execute().get(TIMEOUT, TimeUnit.SECONDS);
+                c.preparePost(String.format("http://localhost:%d/foo/test", port2)).setBody(body).execute().get(TIMEOUT, TimeUnit.SECONDS);
                 fail("Should throw exception. Too many connections issued.");
             } catch (Exception ex) {
                 ex.printStackTrace();
                 exception = ex;
             }
             assertNotNull(exception);
-            assertNotNull(exception.getCause());
-            assertEquals(exception.getCause().getMessage(), "Too many connections 1");
+            throw exception.getCause();
         }
     }
 
@@ -262,7 +261,7 @@ public class ConnectionPoolTest extends AbstractBasicTest {
 
     @Test(groups = "standalone")
     public void testPooledEventsFired() throws Exception {
-        RequestBuilder request = get("http://127.0.0.1:" + port1 + "/Test");
+        RequestBuilder request = get("http://localhost:" + port1 + "/Test");
 
         try (AsyncHttpClient client = asyncHttpClient()) {
             EventCollectingHandler firstHandler = new EventCollectingHandler();

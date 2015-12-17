@@ -19,6 +19,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.asynchttpclient.Dsl.*;
 import static org.asynchttpclient.test.TestUtils.*;
 import static org.testng.Assert.*;
+import io.netty.handler.codec.http.HttpHeaders;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -81,16 +82,16 @@ public class BasicAuthTest extends AbstractBasicTest {
 
     @Override
     protected String getTargetUrl() {
-        return "http://127.0.0.1:" + port1 + "/";
+        return "http://localhost:" + port1 + "/";
     }
 
     @Override
     protected String getTargetUrl2() {
-        return "http://127.0.0.1:" + port2 + "/uff";
+        return "http://localhost:" + port2 + "/uff";
     }
 
     protected String getTargetUrlNoAuth() {
-        return "http://127.0.0.1:" + portNoAuth + "/";
+        return "http://localhost:" + portNoAuth + "/";
     }
 
     @Override
@@ -116,7 +117,7 @@ public class BasicAuthTest extends AbstractBasicTest {
                 LOGGER.info("got redirected" + request.getRequestURI());
                 response.setStatus(200);
                 response.addHeader("X-Auth", request.getHeader("Authorization"));
-                response.addHeader("X-Content-Length", String.valueOf(request.getContentLength()));
+                response.addHeader("X-" + HttpHeaders.Names.CONTENT_LENGTH, String.valueOf(request.getContentLength()));
                 byte[] b = "content".getBytes(UTF_8);
                 response.setContentLength(b.length);
                 response.getOutputStream().write(b);
@@ -136,7 +137,7 @@ public class BasicAuthTest extends AbstractBasicTest {
 
             } else {
                 response.addHeader("X-Auth", request.getHeader("Authorization"));
-                response.addHeader("X-Content-Length", String.valueOf(request.getContentLength()));
+                response.addHeader("X-" + HttpHeaders.Names.CONTENT_LENGTH, String.valueOf(request.getContentLength()));
                 response.setStatus(200);
 
                 int size = 10 * 1024;
@@ -173,7 +174,7 @@ public class BasicAuthTest extends AbstractBasicTest {
     }
 
     @Test(groups = "standalone")
-    public void redirectAndDigestAuthTest() throws Exception, ExecutionException, TimeoutException, InterruptedException {
+    public void redirectAndBasicAuthTest() throws Exception, ExecutionException, TimeoutException, InterruptedException {
         try (AsyncHttpClient client = asyncHttpClient(config().setFollowRedirect(true).setMaxRedirects(10))) {
             Future<Response> f = client.prepareGet(getTargetUrl2())//
                     .setRealm(basicAuthRealm(USER, ADMIN).build())//

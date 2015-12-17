@@ -11,23 +11,16 @@
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the Apache License Version 2.0 for the specific language governing permissions and limitations there under.
  */
-package org.asynchttpclient.netty;
+package org.asynchttpclient.request.body.generator;
 
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
+import java.nio.ByteBuffer;
 
-public abstract class SimpleGenericFutureListener<V> implements GenericFutureListener<Future<V>> {
+public final class BodyChunk {
+    public final boolean last;
+    public final ByteBuffer buffer;
 
-    @Override
-    public final void operationComplete(Future<V> future) throws Exception {
-        if (future.isSuccess()) {
-            onSuccess(future.get());
-        } else {
-            onFailure(future.cause());
-        }
+    public BodyChunk(final ByteBuffer buffer, final boolean last) {
+        this.buffer = buffer;
+        this.last = last;
     }
-
-    protected abstract void onSuccess(V value) throws Exception;
-
-    protected abstract void onFailure(Throwable t) throws Exception;
 }

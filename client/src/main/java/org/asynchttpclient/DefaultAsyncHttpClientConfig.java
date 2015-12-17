@@ -31,18 +31,17 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ThreadFactory;
 
-import org.asynchttpclient.channel.pool.KeepAliveStrategy;
+import org.asynchttpclient.channel.ChannelPool;
+import org.asynchttpclient.channel.KeepAliveStrategy;
 import org.asynchttpclient.filter.IOExceptionFilter;
 import org.asynchttpclient.filter.RequestFilter;
 import org.asynchttpclient.filter.ResponseFilter;
-import org.asynchttpclient.netty.channel.pool.ChannelPool;
 import org.asynchttpclient.proxy.ProxyServer;
 import org.asynchttpclient.proxy.ProxyServerSelector;
 import org.asynchttpclient.util.ProxyUtils;
 
 /**
- * Configuration class to use with a {@link AsyncHttpClient}. System property
- * can be also used to configure this object default behavior by doing: <br>
+ * Configuration class to use with a {@link AsyncHttpClient}. System property can be also used to configure this object default behavior by doing: <br>
  * -Dorg.asynchttpclient.nameOfTheProperty
  * 
  * @see AsyncHttpClientConfig for documentation
@@ -73,6 +72,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
     private final boolean disableZeroCopy;
     private final boolean keepEncodingHeader;
     private final ProxyServerSelector proxyServerSelector;
+    private final boolean validateResponseHeaders;
 
     // timeouts
     private final int connectTimeout;
@@ -117,6 +117,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
     private final Map<ChannelOption<Object>, Object> channelOptions;
     private final EventLoopGroup eventLoopGroup;
     private final boolean useNativeTransport;
+    private final boolean usePooledMemory;
     private final Timer nettyTimer;
     private final ThreadFactory threadFactory;
     private final AdditionalChannelInitializer httpAdditionalChannelInitializer;
@@ -136,6 +137,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
             boolean disableZeroCopy,//
             boolean keepEncodingHeader,//
             ProxyServerSelector proxyServerSelector,//
+            boolean validateResponseHeaders,//
 
             // timeouts
             int connectTimeout,//
@@ -180,6 +182,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
             Map<ChannelOption<Object>, Object> channelOptions,//
             EventLoopGroup eventLoopGroup,//
             boolean useNativeTransport,//
+            boolean usePooledMemory,//
             Timer nettyTimer,//
             ThreadFactory threadFactory,//
             AdditionalChannelInitializer httpAdditionalChannelInitializer,//
@@ -198,6 +201,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
         this.disableZeroCopy = disableZeroCopy;
         this.keepEncodingHeader = keepEncodingHeader;
         this.proxyServerSelector = proxyServerSelector;
+        this.validateResponseHeaders = validateResponseHeaders;
 
         // timeouts
         this.connectTimeout = connectTimeout;
@@ -242,6 +246,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
         this.channelOptions = channelOptions;
         this.eventLoopGroup = eventLoopGroup;
         this.useNativeTransport = useNativeTransport;
+        this.usePooledMemory = usePooledMemory;
         this.nettyTimer = nettyTimer;
         this.threadFactory = threadFactory;
         this.httpAdditionalChannelInitializer = httpAdditionalChannelInitializer;
@@ -373,12 +378,17 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
         return keepAliveStrategy;
     }
 
+    @Override
+    public boolean isValidateResponseHeaders() {
+        return validateResponseHeaders;
+    }
+
     // ssl
     @Override
     public boolean isUseOpenSsl() {
         return useOpenSsl;
     }
-    
+
     @Override
     public boolean isAcceptAnyCertificate() {
         return acceptAnyCertificate;
@@ -487,6 +497,11 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
     }
 
     @Override
+    public boolean isUsePooledMemory() {
+        return usePooledMemory;
+    }
+
+    @Override
     public Timer getNettyTimer() {
         return nettyTimer;
     }
@@ -530,6 +545,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
         private ProxyServerSelector proxyServerSelector;
         private boolean useProxySelector = defaultUseProxySelector();
         private boolean useProxyProperties = defaultUseProxyProperties();
+        private boolean validateResponseHeaders = defaultValidateResponseHeaders();
 
         // timeouts
         private int connectTimeout = defaultConnectTimeout();
@@ -572,6 +588,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
         private int webSocketMaxBufferSize = defaultWebSocketMaxBufferSize();
         private int webSocketMaxFrameSize = defaultWebSocketMaxFrameSize();
         private boolean useNativeTransport = defaultUseNativeTransport();
+        private boolean usePooledMemory = defaultUsePooledMemory();
         private Map<ChannelOption<Object>, Object> channelOptions = new HashMap<>();
         private EventLoopGroup eventLoopGroup;
         private Timer nettyTimer;
@@ -639,6 +656,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
             channelOptions.putAll(config.getChannelOptions());
             eventLoopGroup = config.getEventLoopGroup();
             useNativeTransport = config.isUseNativeTransport();
+            usePooledMemory = config.isUsePooledMemory();
             nettyTimer = config.getNettyTimer();
             threadFactory = config.getThreadFactory();
             httpAdditionalChannelInitializer = config.getHttpAdditionalChannelInitializer();
@@ -676,7 +694,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
             this.realm = realm;
             return this;
         }
-        
+
         public Builder setRealm(Realm.Builder realmBuilder) {
             this.realm = realmBuilder.build();
             return this;
@@ -707,11 +725,16 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
             return this;
         }
 
+        public Builder setValidateResponseHeaders(boolean validateResponseHeaders) {
+            this.validateResponseHeaders = validateResponseHeaders;
+            return this;
+        }
+
         public Builder setProxyServer(ProxyServer proxyServer) {
             this.proxyServerSelector = ProxyUtils.createProxyServerSelector(proxyServer);
             return this;
         }
-        
+
         public Builder setProxyServer(ProxyServer.Builder proxyServerBuilder) {
             this.proxyServerSelector = ProxyUtils.createProxyServerSelector(proxyServerBuilder.build());
             return this;
@@ -918,6 +941,11 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
             return this;
         }
 
+        public Builder setUsePooledMemory(boolean usePooledMemory) {
+            this.usePooledMemory = usePooledMemory;
+            return this;
+        }
+
         public Builder setNettyTimer(Timer nettyTimer) {
             this.nettyTimer = nettyTimer;
             return this;
@@ -970,6 +998,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
                     disableZeroCopy, //
                     keepEncodingHeader, //
                     resolveProxyServerSelector(), //
+                    validateResponseHeaders, //
                     connectTimeout, //
                     requestTimeout, //
                     readTimeout, //
@@ -1004,6 +1033,7 @@ public class DefaultAsyncHttpClientConfig implements AsyncHttpClientConfig {
                     channelOptions.isEmpty() ? Collections.emptyMap() : Collections.unmodifiableMap(channelOptions),//
                     eventLoopGroup, //
                     useNativeTransport, //
+                    usePooledMemory, //
                     nettyTimer, //
                     threadFactory, //
                     httpAdditionalChannelInitializer, //

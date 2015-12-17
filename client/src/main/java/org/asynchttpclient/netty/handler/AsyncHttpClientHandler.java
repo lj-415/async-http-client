@@ -13,7 +13,6 @@
  */
 package org.asynchttpclient.netty.handler;
 
-import static org.asynchttpclient.util.HttpUtils.CHANNEL_CLOSED_EXCEPTION;
 import static org.asynchttpclient.util.MiscUtils.getCause;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -29,9 +28,10 @@ import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
 
 import org.asynchttpclient.AsyncHttpClientConfig;
+import org.asynchttpclient.HttpResponseBodyPart;
+import org.asynchttpclient.exception.ChannelClosedException;
 import org.asynchttpclient.netty.Callback;
 import org.asynchttpclient.netty.DiscardEvent;
-import org.asynchttpclient.netty.NettyResponseBodyPart;
 import org.asynchttpclient.netty.NettyResponseFuture;
 import org.asynchttpclient.netty.channel.ChannelManager;
 import org.asynchttpclient.netty.channel.Channels;
@@ -89,7 +89,7 @@ public class AsyncHttpClientHandler extends ChannelInboundHandlerAdapter {
                     ByteBuf content = ((HttpContent) msg).content();
                     // Republish as a HttpResponseBodyPart
                     if (content.readableBytes() > 0) {
-                        NettyResponseBodyPart part = config.getResponseBodyPartFactory().newResponseBodyPart(content, false);
+                        HttpResponseBodyPart part = config.getResponseBodyPartFactory().newResponseBodyPart(content, false);
                         ctx.fireChannelRead(part);
                     }
                     if (msg instanceof LastHttpContent) {
@@ -148,7 +148,7 @@ public class AsyncHttpClientHandler extends ChannelInboundHandlerAdapter {
             NettyResponseFuture<?> future = NettyResponseFuture.class.cast(attribute);
             future.touch();
 
-            if (!config.getIoExceptionFilters().isEmpty() && requestSender.applyIoExceptionFiltersAndReplayRequest(future, CHANNEL_CLOSED_EXCEPTION, channel))
+            if (!config.getIoExceptionFilters().isEmpty() && requestSender.applyIoExceptionFiltersAndReplayRequest(future, ChannelClosedException.INSTANCE, channel))
                 return;
 
             protocol.onClose(future);
@@ -186,7 +186,7 @@ public class AsyncHttpClientHandler extends ChannelInboundHandlerAdapter {
                     // FIXME why drop the original exception and throw a new
                     // one?
                     if (!config.getIoExceptionFilters().isEmpty()) {
-                        if (!requestSender.applyIoExceptionFiltersAndReplayRequest(future, CHANNEL_CLOSED_EXCEPTION, channel))
+                        if (!requestSender.applyIoExceptionFiltersAndReplayRequest(future, ChannelClosedException.INSTANCE, channel))
                             // Close the channel so the recovering can occurs.
                             Channels.silentlyCloseChannel(channel);
                         return;

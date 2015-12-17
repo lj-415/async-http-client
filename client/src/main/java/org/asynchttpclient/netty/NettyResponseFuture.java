@@ -16,9 +16,7 @@ package org.asynchttpclient.netty;
 import static org.asynchttpclient.util.DateUtils.millisTime;
 import static org.asynchttpclient.util.MiscUtils.getCause;
 import io.netty.channel.Channel;
-import io.netty.handler.codec.http.HttpHeaders;
 
-import java.net.SocketAddress;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -35,7 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.asynchttpclient.AsyncHandler;
 import org.asynchttpclient.Realm;
 import org.asynchttpclient.Request;
-import org.asynchttpclient.channel.pool.ConnectionPoolPartitioning;
+import org.asynchttpclient.channel.ChannelPoolPartitioning;
 import org.asynchttpclient.future.AbstractListenableFuture;
 import org.asynchttpclient.netty.channel.ChannelState;
 import org.asynchttpclient.netty.channel.Channels;
@@ -56,7 +54,7 @@ public final class NettyResponseFuture<V> extends AbstractListenableFuture<V> {
     private static final Logger LOGGER = LoggerFactory.getLogger(NettyResponseFuture.class);
 
     private final long start = millisTime();
-    private final ConnectionPoolPartitioning connectionPoolPartitioning;
+    private final ChannelPoolPartitioning connectionPoolPartitioning;
     private final ProxyServer proxyServer;
     private final int maxRetry;
     private final CountDownLatch latch = new CountDownLatch(1);
@@ -84,7 +82,6 @@ public final class NettyResponseFuture<V> extends AbstractListenableFuture<V> {
     private Request targetRequest;
     private Request currentRequest;
     private NettyRequest nettyRequest;
-    private HttpHeaders httpHeaders;
     private AsyncHandler<V> asyncHandler;
     private boolean streamWasAlreadyConsumed;
     private boolean reuseChannel;
@@ -98,7 +95,7 @@ public final class NettyResponseFuture<V> extends AbstractListenableFuture<V> {
             AsyncHandler<V> asyncHandler,//
             NettyRequest nettyRequest,//
             int maxRetry,//
-            ConnectionPoolPartitioning connectionPoolPartitioning,//
+            ChannelPoolPartitioning connectionPoolPartitioning,//
             ProxyServer proxyServer) {
 
         this.asyncHandler = asyncHandler;
@@ -274,7 +271,7 @@ public final class NettyResponseFuture<V> extends AbstractListenableFuture<V> {
         return targetRequest.getUri();
     }
 
-    public ConnectionPoolPartitioning getConnectionPoolPartitioning() {
+    public ChannelPoolPartitioning getConnectionPoolPartitioning() {
         return connectionPoolPartitioning;
     }
 
@@ -319,14 +316,6 @@ public final class NettyResponseFuture<V> extends AbstractListenableFuture<V> {
 
     public final void setKeepAlive(final boolean keepAlive) {
         this.keepAlive = keepAlive;
-    }
-
-    public final HttpHeaders getHttpHeaders() {
-        return httpHeaders;
-    }
-
-    public final void setHttpHeaders(HttpHeaders httpHeaders) {
-        this.httpHeaders = httpHeaders;
     }
 
     public int incrementAndGetCurrentRedirectCount() {
@@ -420,10 +409,6 @@ public final class NettyResponseFuture<V> extends AbstractListenableFuture<V> {
         return maxRetry > 0 && currentRetry.incrementAndGet() <= maxRetry;
     }
 
-    public SocketAddress getChannelRemoteAddress() {
-        return channel != null ? channel.remoteAddress() : null;
-    }
-
     public void setTargetRequest(Request targetRequest) {
         this.targetRequest = targetRequest;
     }
@@ -477,7 +462,6 @@ public final class NettyResponseFuture<V> extends AbstractListenableFuture<V> {
                 ",\n\tcontent=" + content + //
                 ",\n\turi=" + getUri() + //
                 ",\n\tkeepAlive=" + keepAlive + //
-                ",\n\thttpHeaders=" + httpHeaders + //
                 ",\n\texEx=" + exEx + //
                 ",\n\tredirectCount=" + redirectCount + //
                 ",\n\ttimeoutsHolder=" + timeoutsHolder + //

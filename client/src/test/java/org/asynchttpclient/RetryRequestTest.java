@@ -22,7 +22,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.asynchttpclient.util.HttpUtils;
+import org.asynchttpclient.exception.RemotelyClosedException;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.testng.annotations.Test;
@@ -60,7 +60,7 @@ public class RetryRequestTest extends AbstractBasicTest {
     }
 
     protected String getTargetUrl() {
-        return String.format("http://127.0.0.1:%d/", port1);
+        return String.format("http://localhost:%d/", port1);
     }
 
     @Override
@@ -74,11 +74,7 @@ public class RetryRequestTest extends AbstractBasicTest {
             ahc.executeRequest(ahc.prepareGet(getTargetUrl()).build()).get();
             fail();
         } catch (Exception t) {
-            assertNotNull(t.getCause());
-            assertEquals(t.getCause().getClass(), IOException.class);
-            if (t.getCause() != HttpUtils.REMOTELY_CLOSED_EXCEPTION) {
-                fail();
-            }
+            assertEquals(t.getCause(), RemotelyClosedException.INSTANCE);
         }
     }
 }

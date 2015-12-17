@@ -11,14 +11,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadFactory;
 
-import org.asynchttpclient.channel.pool.KeepAliveStrategy;
+import org.asynchttpclient.channel.ChannelPool;
+import org.asynchttpclient.channel.KeepAliveStrategy;
 import org.asynchttpclient.filter.IOExceptionFilter;
 import org.asynchttpclient.filter.RequestFilter;
 import org.asynchttpclient.filter.ResponseFilter;
-import org.asynchttpclient.netty.EagerNettyResponseBodyPart;
-import org.asynchttpclient.netty.LazyNettyResponseBodyPart;
-import org.asynchttpclient.netty.NettyResponseBodyPart;
-import org.asynchttpclient.netty.channel.pool.ChannelPool;
+import org.asynchttpclient.netty.EagerResponseBodyPart;
+import org.asynchttpclient.netty.LazyResponseBodyPart;
 import org.asynchttpclient.proxy.ProxyServer;
 import org.asynchttpclient.proxy.ProxyServerSelector;
 
@@ -30,64 +29,51 @@ public interface AsyncHttpClientConfig {
     String getAhcVersion();
 
     /**
-     * Return the name of {@link AsyncHttpClient}, which is used for thread
-     * naming and debugging.
+     * Return the name of {@link AsyncHttpClient}, which is used for thread naming and debugging.
      *
      * @return the name.
      */
     String getThreadPoolName();
 
     /**
-     * Return the maximum number of connections an {@link AsyncHttpClient} can
-     * handle.
+     * Return the maximum number of connections an {@link AsyncHttpClient} can handle.
      *
-     * @return the maximum number of connections an {@link AsyncHttpClient} can
-     *         handle.
+     * @return the maximum number of connections an {@link AsyncHttpClient} can handle.
      */
     int getMaxConnections();
 
     /**
-     * Return the maximum number of connections per hosts an
-     * {@link AsyncHttpClient} can handle.
+     * Return the maximum number of connections per hosts an {@link AsyncHttpClient} can handle.
      *
-     * @return the maximum number of connections per host an
-     *         {@link AsyncHttpClient} can handle.
+     * @return the maximum number of connections per host an {@link AsyncHttpClient} can handle.
      */
     int getMaxConnectionsPerHost();
 
     /**
-     * Return the maximum time in millisecond an {@link AsyncHttpClient} can
-     * wait when connecting to a remote host
+     * Return the maximum time in millisecond an {@link AsyncHttpClient} can wait when connecting to a remote host
      *
-     * @return the maximum time in millisecond an {@link AsyncHttpClient} can
-     *         wait when connecting to a remote host
+     * @return the maximum time in millisecond an {@link AsyncHttpClient} can wait when connecting to a remote host
      */
     int getConnectTimeout();
 
     /**
-     * Return the maximum time in millisecond an {@link AsyncHttpClient} can
-     * stay idle.
+     * Return the maximum time in millisecond an {@link AsyncHttpClient} can stay idle.
      *
-     * @return the maximum time in millisecond an {@link AsyncHttpClient} can
-     *         stay idle.
+     * @return the maximum time in millisecond an {@link AsyncHttpClient} can stay idle.
      */
     int getReadTimeout();
 
     /**
-     * Return the maximum time in millisecond an {@link AsyncHttpClient} will
-     * keep connection in pool.
+     * Return the maximum time in millisecond an {@link AsyncHttpClient} will keep connection in pool.
      *
-     * @return the maximum time in millisecond an {@link AsyncHttpClient} will
-     *         keep connection in pool.
+     * @return the maximum time in millisecond an {@link AsyncHttpClient} will keep connection in pool.
      */
     int getPooledConnectionIdleTimeout();
 
     /**
-     * Return the maximum time in millisecond an {@link AsyncHttpClient} waits
-     * until the response is completed.
+     * Return the maximum time in millisecond an {@link AsyncHttpClient} waits until the response is completed.
      *
-     * @return the maximum time in millisecond an {@link AsyncHttpClient} waits
-     *         until the response is completed.
+     * @return the maximum time in millisecond an {@link AsyncHttpClient} waits until the response is completed.
      */
     int getRequestTimeout();
 
@@ -127,13 +113,10 @@ public interface AsyncHttpClientConfig {
     boolean isCompressionEnforced();
 
     /**
-     * Return the {@link java.util.concurrent.ThreadFactory} an
-     * {@link AsyncHttpClient} use for handling asynchronous response.
+     * Return the {@link java.util.concurrent.ThreadFactory} an {@link AsyncHttpClient} use for handling asynchronous response.
      *
-     * @return the {@link java.util.concurrent.ThreadFactory} an
-     *         {@link AsyncHttpClient} use for handling asynchronous response.
-     *         If no {@link ThreadFactory} has been explicitly provided, this
-     *         method will return <code>null</code>
+     * @return the {@link java.util.concurrent.ThreadFactory} an {@link AsyncHttpClient} use for handling asynchronous response. If no {@link ThreadFactory} has been explicitly
+     *         provided, this method will return <code>null</code>
      */
     ThreadFactory getThreadFactory();
 
@@ -180,11 +163,9 @@ public interface AsyncHttpClientConfig {
     List<IOExceptionFilter> getIoExceptionFilters();
 
     /**
-     * Return the number of time the library will retry when an
-     * {@link java.io.IOException} is throw by the remote server
+     * Return the number of time the library will retry when an {@link java.io.IOException} is throw by the remote server
      *
-     * @return the number of time the library will retry when an
-     *         {@link java.io.IOException} is throw by the remote server
+     * @return the number of time the library will retry when an {@link java.io.IOException} is throw by the remote server
      */
     int getMaxRequestRetry();
 
@@ -194,28 +175,22 @@ public interface AsyncHttpClientConfig {
     boolean isDisableUrlEncodingForBoundRequests();
 
     /**
-     * In the case of a POST/Redirect/Get scenario where the server uses a 302
-     * for the redirect, should AHC respond to the redirect with a GET or
-     * whatever the original method was. Unless configured otherwise, for a 302,
-     * AHC, will use a GET for this case.
+     * In the case of a POST/Redirect/Get scenario where the server uses a 302 for the redirect, should AHC respond to the redirect with a GET or whatever the original method was.
+     * Unless configured otherwise, for a 302, AHC, will use a GET for this case.
      *
-     * @return <code>true</code> if string 302 handling is to be used, otherwise
-     *         <code>false</code>.
+     * @return <code>true</code> if string 302 handling is to be used, otherwise <code>false</code>.
      */
     boolean isStrict302Handling();
 
     /**
-     * Return the maximum time in millisecond an {@link AsyncHttpClient} will
-     * keep connection in the pool, or -1 to keep connection while possible.
+     * Return the maximum time in millisecond an {@link AsyncHttpClient} will keep connection in the pool, or -1 to keep connection while possible.
      *
-     * @return the maximum time in millisecond an {@link AsyncHttpClient} will
-     *         keep connection in the pool, or -1 to keep connection while
-     *         possible.
+     * @return the maximum time in millisecond an {@link AsyncHttpClient} will keep connection in the pool, or -1 to keep connection while possible.
      */
     int getConnectionTtl();
 
     boolean isUseOpenSsl();
-    
+
     boolean isAcceptAnyCertificate();
 
     /**
@@ -280,6 +255,10 @@ public interface AsyncHttpClientConfig {
 
     KeepAliveStrategy getKeepAliveStrategy();
 
+    boolean isValidateResponseHeaders();
+
+    boolean isUsePooledMemory();
+
     interface AdditionalChannelInitializer {
 
         void initChannel(Channel channel) throws Exception;
@@ -289,19 +268,19 @@ public interface AsyncHttpClientConfig {
 
         EAGER {
             @Override
-            public NettyResponseBodyPart newResponseBodyPart(ByteBuf buf, boolean last) {
-                return new EagerNettyResponseBodyPart(buf, last);
+            public HttpResponseBodyPart newResponseBodyPart(ByteBuf buf, boolean last) {
+                return new EagerResponseBodyPart(buf, last);
             }
         },
 
         LAZY {
 
             @Override
-            public NettyResponseBodyPart newResponseBodyPart(ByteBuf buf, boolean last) {
-                return new LazyNettyResponseBodyPart(buf, last);
+            public HttpResponseBodyPart newResponseBodyPart(ByteBuf buf, boolean last) {
+                return new LazyResponseBodyPart(buf, last);
             }
         };
 
-        public abstract NettyResponseBodyPart newResponseBodyPart(ByteBuf buf, boolean last);
+        public abstract HttpResponseBodyPart newResponseBodyPart(ByteBuf buf, boolean last);
     }
 }

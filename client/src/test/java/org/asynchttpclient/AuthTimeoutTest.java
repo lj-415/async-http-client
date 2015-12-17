@@ -16,6 +16,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.asynchttpclient.Dsl.*;
 import static org.asynchttpclient.test.TestUtils.*;
 import static org.testng.Assert.*;
+import io.netty.handler.codec.http.HttpHeaders;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -26,7 +27,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.asynchttpclient.util.HttpUtils;
+import org.asynchttpclient.exception.RemotelyClosedException;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.AbstractHandler;
@@ -69,7 +70,7 @@ public class AuthTimeoutTest extends AbstractBasicTest {
             OutputStream out = response.getOutputStream();
             if (request.getHeader("X-Content") != null) {
                 String content = request.getHeader("X-Content");
-                response.setHeader("Content-Length", String.valueOf(content.getBytes(UTF_8).length));
+                response.setHeader(HttpHeaders.Names.CONTENT_LENGTH, String.valueOf(content.getBytes(UTF_8).length));
                 out.write(content.substring(1).getBytes(UTF_8));
             } else {
                 response.setStatus(200);
@@ -168,11 +169,7 @@ public class AuthTimeoutTest extends AbstractBasicTest {
     }
 
     protected void inspectException(Throwable t) {
-        assertNotNull(t.getCause());
-        assertEquals(t.getCause().getClass(), IOException.class);
-        if (t.getCause() != HttpUtils.REMOTELY_CLOSED_EXCEPTION) {
-            fail();
-        }
+        assertEquals(t.getCause(), RemotelyClosedException.INSTANCE);
     }
 
     private AsyncHttpClient newClient() {
@@ -189,7 +186,7 @@ public class AuthTimeoutTest extends AbstractBasicTest {
 
     @Override
     protected String getTargetUrl() {
-        return "http://127.0.0.1:" + port1 + "/";
+        return "http://localhost:" + port1 + "/";
     }
 
     @Override

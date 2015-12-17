@@ -176,7 +176,6 @@ public class TestUtils {
     public static void addHttpConnector(Server server, int port) {
         ServerConnector connector = new ServerConnector(server);
         connector.setPort(port);
-
         server.addConnector(connector);
     }
 

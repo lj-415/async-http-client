@@ -12,33 +12,26 @@
  */
 package org.asynchttpclient.netty;
 
+import static org.asynchttpclient.util.ByteBufUtils.byteBuf2Bytes;
 import io.netty.buffer.ByteBuf;
 
 import java.nio.ByteBuffer;
 
-import org.asynchttpclient.netty.util.ByteBufUtils;
+import org.asynchttpclient.HttpResponseBodyPart;
 
 /**
  * A callback class used when an HTTP response body is received.
+ * Bytes are eagerly fetched from the ByteBuf
  */
-public class LazyNettyResponseBodyPart extends NettyResponseBodyPart {
+public class EagerResponseBodyPart extends HttpResponseBodyPart {
 
-    private final ByteBuf buf;
+    private final byte[] bytes;
 
-    public LazyNettyResponseBodyPart(ByteBuf buf, boolean last) {
+    public EagerResponseBodyPart(ByteBuf buf, boolean last) {
         super(last);
-        this.buf = buf;
+        bytes = byteBuf2Bytes(buf);
     }
 
-    public ByteBuf getBuf() {
-        return buf;
-    }
-
-    @Override
-    public int length() {
-        return buf.readableBytes();
-    }
-    
     /**
      * Return the response body's part bytes received.
      * 
@@ -46,11 +39,16 @@ public class LazyNettyResponseBodyPart extends NettyResponseBodyPart {
      */
     @Override
     public byte[] getBodyPartBytes() {
-        return ByteBufUtils.byteBuf2Bytes(buf.duplicate());
+        return bytes;
+    }
+
+    @Override
+    public int length() {
+        return bytes.length;
     }
 
     @Override
     public ByteBuffer getBodyByteBuffer() {
-        return buf.nioBuffer();
+        return ByteBuffer.wrap(bytes);
     }
 }

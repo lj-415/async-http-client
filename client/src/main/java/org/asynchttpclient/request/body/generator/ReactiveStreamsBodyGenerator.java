@@ -35,7 +35,7 @@ public class ReactiveStreamsBodyGenerator implements FeedableBodyGenerator {
 
     public ReactiveStreamsBodyGenerator(Publisher<ByteBuffer> publisher) {
         this.publisher = publisher;
-        this.feedableBodyGenerator = new SimpleFeedableBodyGenerator();
+        this.feedableBodyGenerator = new UnboundedQueueFeedableBodyGenerator();
     }
 
     public Publisher<ByteBuffer> getPublisher() {
@@ -43,8 +43,8 @@ public class ReactiveStreamsBodyGenerator implements FeedableBodyGenerator {
     }
 
     @Override
-    public void feed(ByteBuffer buffer, boolean isLast) {
-        feedableBodyGenerator.feed(buffer, isLast);
+    public boolean feed(ByteBuffer buffer, boolean isLast) throws Exception {
+        return feedableBodyGenerator.feed(buffer, isLast);
     }
 
     @Override

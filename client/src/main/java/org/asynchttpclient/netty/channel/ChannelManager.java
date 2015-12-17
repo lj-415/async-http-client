@@ -13,9 +13,10 @@
  */
 package org.asynchttpclient.netty.channel;
 
-import static org.asynchttpclient.util.MiscUtils.buildStaticIOException;
+import static org.asynchttpclient.util.MiscUtils.trimStackTrace;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
@@ -34,11 +35,12 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.Timer;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import io.netty.util.concurrent.GenericFutureListener;
-import io.netty.util.internal.chmv8.ConcurrentHashMapV8;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
 
 import java.io.IOException;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -49,13 +51,15 @@ import javax.net.ssl.SSLException;
 import org.asynchttpclient.AsyncHandler;
 import org.asynchttpclient.AsyncHttpClientConfig;
 import org.asynchttpclient.SslEngineFactory;
-import org.asynchttpclient.channel.pool.ConnectionPoolPartitioning;
+import org.asynchttpclient.channel.ChannelPool;
+import org.asynchttpclient.channel.ChannelPoolPartitioning;
+import org.asynchttpclient.channel.NoopChannelPool;
+import org.asynchttpclient.exception.PoolAlreadyClosedException;
+import org.asynchttpclient.exception.TooManyConnectionsException;
+import org.asynchttpclient.exception.TooManyConnectionsPerHostException;
 import org.asynchttpclient.handler.AsyncHandlerExtensions;
 import org.asynchttpclient.netty.Callback;
 import org.asynchttpclient.netty.NettyResponseFuture;
-import org.asynchttpclient.netty.channel.pool.ChannelPool;
-import org.asynchttpclient.netty.channel.pool.DefaultChannelPool;
-import org.asynchttpclient.netty.channel.pool.NoopChannelPool;
 import org.asynchttpclient.netty.handler.AsyncHttpClientHandler;
 import org.asynchttpclient.netty.handler.HttpProtocol;
 import org.asynchttpclient.netty.handler.WebSocketProtocol;
@@ -85,22 +89,19 @@ public class ChannelManager {
     private final SslEngineFactory sslEngineFactory;
     private final EventLoopGroup eventLoopGroup;
     private final boolean allowReleaseEventLoopGroup;
-    private final Class<? extends Channel> socketChannelClass;
     private final Bootstrap httpBootstrap;
     private final Bootstrap wsBootstrap;
     private final long handshakeTimeout;
     private final IOException tooManyConnections;
     private final IOException tooManyConnectionsPerHost;
-    private final IOException poolAlreadyClosed;
 
     private final ChannelPool channelPool;
     private final boolean maxTotalConnectionsEnabled;
     private final Semaphore freeChannels;
     private final ChannelGroup openChannels;
     private final boolean maxConnectionsPerHostEnabled;
-    private final ConcurrentHashMapV8<Object, Semaphore> freeChannelsPerHost;
-    private final ConcurrentHashMapV8<Channel, Object> channelId2PartitionKey;
-    private final ConcurrentHashMapV8.Fun<Object, Semaphore> semaphoreComputer;
+    private final ConcurrentHashMap<Object, Semaphore> freeChannelsPerHost = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Channel, Object> channelId2PartitionKey = new ConcurrentHashMap<>();
 
     private AsyncHttpClientHandler wsHandler;
 
@@ -123,9 +124,8 @@ public class ChannelManager {
         }
         this.channelPool = channelPool;
 
-        tooManyConnections = buildStaticIOException("Too many connections " + config.getMaxConnections());
-        tooManyConnectionsPerHost = buildStaticIOException("Too many connections per host " + config.getMaxConnectionsPerHost());
-        poolAlreadyClosed = buildStaticIOException("Pool is already closed");
+        tooManyConnections = trimStackTrace(new TooManyConnectionsException(config.getMaxConnections()));
+        tooManyConnectionsPerHost = trimStackTrace(new TooManyConnectionsPerHostException(config.getMaxConnectionsPerHost()));
         maxTotalConnectionsEnabled = config.getMaxConnections() > 0;
         maxConnectionsPerHostEnabled = config.getMaxConnectionsPerHost() > 0;
 
@@ -155,26 +155,12 @@ public class ChannelManager {
             freeChannels = null;
         }
 
-        if (maxConnectionsPerHostEnabled) {
-            freeChannelsPerHost = new ConcurrentHashMapV8<>();
-            channelId2PartitionKey = new ConcurrentHashMapV8<>();
-            semaphoreComputer = new ConcurrentHashMapV8.Fun<Object, Semaphore>() {
-                @Override
-                public Semaphore apply(Object partitionKey) {
-                    return new Semaphore(config.getMaxConnectionsPerHost());
-                }
-            };
-        } else {
-            freeChannelsPerHost = null;
-            channelId2PartitionKey = null;
-            semaphoreComputer = null;
-        }
-
         handshakeTimeout = config.getHandshakeTimeout();
 
         // check if external EventLoopGroup is defined
         ThreadFactory threadFactory = config.getThreadFactory() != null ? config.getThreadFactory() : new DefaultThreadFactory(config.getThreadPoolName());
         allowReleaseEventLoopGroup = config.getEventLoopGroup() == null;
+        Class<? extends Channel> socketChannelClass;
         if (allowReleaseEventLoopGroup) {
             if (config.isUseNativeTransport()) {
                 eventLoopGroup = newEpollEventLoopGroup(threadFactory);
@@ -197,23 +183,30 @@ public class ChannelManager {
             }
         }
 
-        httpBootstrap = new Bootstrap().channel(socketChannelClass).group(eventLoopGroup);
-        wsBootstrap = new Bootstrap().channel(socketChannelClass).group(eventLoopGroup);
+        httpBootstrap = newBootstrap(socketChannelClass, eventLoopGroup, config);
+        wsBootstrap = newBootstrap(socketChannelClass, eventLoopGroup, config);
 
-        // default to PooledByteBufAllocator
-        httpBootstrap.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
-        wsBootstrap.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+        // for reactive streams
+        httpBootstrap.option(ChannelOption.AUTO_READ, false);
+    }
+
+    private Bootstrap newBootstrap(Class<? extends Channel> socketChannelClass, EventLoopGroup eventLoopGroup, AsyncHttpClientConfig config) {
+        @SuppressWarnings("deprecation")
+        Bootstrap bootstrap = new Bootstrap().channel(socketChannelClass).group(eventLoopGroup)//
+                // default to PooledByteBufAllocator
+                .option(ChannelOption.ALLOCATOR, config.isUsePooledMemory() ? PooledByteBufAllocator.DEFAULT : UnpooledByteBufAllocator.DEFAULT)//
+                .option(ChannelOption.TCP_NODELAY, true)//
+                .option(ChannelOption.AUTO_CLOSE, false);
 
         if (config.getConnectTimeout() > 0) {
-            httpBootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.getConnectTimeout());
-            wsBootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.getConnectTimeout());
+            bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.getConnectTimeout());
         }
+
         for (Entry<ChannelOption<Object>, Object> entry : config.getChannelOptions().entrySet()) {
-            ChannelOption<Object> key = entry.getKey();
-            Object value = entry.getValue();
-            httpBootstrap.option(key, value);
-            wsBootstrap.option(key, value);
+            bootstrap.option(entry.getKey(), entry.getValue());
         }
+
+        return bootstrap;
     }
 
     private EventLoopGroup newEpollEventLoopGroup(ThreadFactory threadFactory) {
@@ -253,8 +246,6 @@ public class ChannelManager {
                         .addLast(INFLATER_HANDLER, newHttpContentDecompressor())//
                         .addLast(CHUNKED_WRITER_HANDLER, new ChunkedWriteHandler())//
                         .addLast(AHC_HTTP_HANDLER, httpHandler);
-
-                ch.config().setOption(ChannelOption.AUTO_READ, false);
 
                 if (config.getHttpAdditionalChannelInitializer() != null)
                     config.getHttpAdditionalChannelInitializer().initChannel(ch);
@@ -302,7 +293,7 @@ public class ChannelManager {
         }
     }
 
-    public Channel poll(Uri uri, String virtualHost, ProxyServer proxy, ConnectionPoolPartitioning connectionPoolPartitioning) {
+    public Channel poll(Uri uri, String virtualHost, ProxyServer proxy, ChannelPoolPartitioning connectionPoolPartitioning) {
         Object partitionKey = connectionPoolPartitioning.getPartitionKey(uri, virtualHost, proxy);
         return channelPool.poll(partitionKey);
     }
@@ -316,7 +307,7 @@ public class ChannelManager {
     }
 
     private Semaphore getFreeConnectionsForHost(Object partitionKey) {
-        return freeChannelsPerHost.computeIfAbsent(partitionKey, semaphoreComputer);
+        return freeChannelsPerHost.computeIfAbsent(partitionKey, pk -> new Semaphore(config.getMaxConnectionsPerHost()));
     }
 
     private boolean tryAcquirePerHost(Object partitionKey) {
@@ -325,7 +316,7 @@ public class ChannelManager {
 
     public void preemptChannel(Object partitionKey) throws IOException {
         if (!channelPool.isOpen())
-            throw poolAlreadyClosed;
+            throw PoolAlreadyClosedException.INSTANCE;
         if (!tryAcquireGlobal())
             throw tooManyConnections;
         if (!tryAcquirePerHost(partitionKey)) {
@@ -352,14 +343,13 @@ public class ChannelManager {
     @SuppressWarnings({ "unchecked", "rawtypes" })
     public void close() {
         if (allowReleaseEventLoopGroup) {
-            io.netty.util.concurrent.Future whenEventLoopGroupClosed = eventLoopGroup.shutdownGracefully(config.getShutdownQuietPeriod(), config.getShutdownTimeout(),
-                    TimeUnit.MILLISECONDS);
-
-            whenEventLoopGroupClosed.addListener((GenericFutureListener<?>) new GenericFutureListener<io.netty.util.concurrent.Future<?>>() {
-                public void operationComplete(io.netty.util.concurrent.Future<?> future) throws Exception {
-                    doClose();
-                };
-            });
+            eventLoopGroup.shutdownGracefully(config.getShutdownQuietPeriod(), config.getShutdownTimeout(), TimeUnit.MILLISECONDS)//
+                    .addListener(new FutureListener() {
+                        @Override
+                        public void operationComplete(Future future) throws Exception {
+                            doClose();
+                        }
+                    });
         } else
             doClose();
     }
@@ -367,8 +357,8 @@ public class ChannelManager {
     public void closeChannel(Channel channel) {
 
         LOGGER.debug("Closing Channel {} ", channel);
-        removeAll(channel);
         Channels.setDiscard(channel);
+        removeAll(channel);
         Channels.silentlyCloseChannel(channel);
         openChannels.remove(channel);
     }
@@ -392,7 +382,8 @@ public class ChannelManager {
                 config.getHttpClientCodecMaxInitialLineLength(),//
                 config.getHttpClientCodecMaxHeaderSize(),//
                 config.getHttpClientCodecMaxChunkSize(),//
-                false);
+                false,//
+                config.isValidateResponseHeaders());
     }
 
     private SslHandler createSslHandler(String peerHost, int peerPort) {

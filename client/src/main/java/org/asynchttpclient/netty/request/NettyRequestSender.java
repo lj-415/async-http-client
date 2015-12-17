@@ -15,11 +15,14 @@ package org.asynchttpclient.netty.request;
 
 import static org.asynchttpclient.util.Assertions.assertNotNull;
 import static org.asynchttpclient.util.AuthenticatorUtils.*;
-import static org.asynchttpclient.util.HttpUtils.*;
+import static org.asynchttpclient.util.HttpConstants.Methods.*;
+import static org.asynchttpclient.util.HttpUtils.requestTimeout;
 import static org.asynchttpclient.util.MiscUtils.getCause;
 import static org.asynchttpclient.util.ProxyUtils.getProxyServer;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelProgressivePromise;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -40,6 +43,7 @@ import org.asynchttpclient.ListenableFuture;
 import org.asynchttpclient.Realm;
 import org.asynchttpclient.Realm.AuthScheme;
 import org.asynchttpclient.Request;
+import org.asynchttpclient.exception.RemotelyClosedException;
 import org.asynchttpclient.filter.FilterContext;
 import org.asynchttpclient.filter.FilterException;
 import org.asynchttpclient.filter.IOExceptionFilter;
@@ -47,7 +51,7 @@ import org.asynchttpclient.handler.AsyncHandlerExtensions;
 import org.asynchttpclient.handler.TransferCompletionHandler;
 import org.asynchttpclient.netty.Callback;
 import org.asynchttpclient.netty.NettyResponseFuture;
-import org.asynchttpclient.netty.SimpleGenericFutureListener;
+import org.asynchttpclient.netty.SimpleFutureListener;
 import org.asynchttpclient.netty.channel.ChannelManager;
 import org.asynchttpclient.netty.channel.ChannelState;
 import org.asynchttpclient.netty.channel.Channels;
@@ -56,7 +60,7 @@ import org.asynchttpclient.netty.timeout.ReadTimeoutTimerTask;
 import org.asynchttpclient.netty.timeout.RequestTimeoutTimerTask;
 import org.asynchttpclient.netty.timeout.TimeoutsHolder;
 import org.asynchttpclient.proxy.ProxyServer;
-import org.asynchttpclient.resolver.RequestNameResolver;
+import org.asynchttpclient.resolver.RequestHostnameResolver;
 import org.asynchttpclient.uri.Uri;
 import org.asynchttpclient.ws.WebSocketUpgradeHandler;
 import org.slf4j.Logger;
@@ -112,7 +116,7 @@ public final class NettyRequestSender {
         return future != null //
                 && future.getNettyRequest() != null //
                 && future.getNettyRequest().getHttpRequest().getMethod() == HttpMethod.CONNECT //
-                && !request.getMethod().equals(HttpMethod.CONNECT.name());
+                && !request.getMethod().equals(CONNECT);
     }
 
     /**
@@ -270,8 +274,8 @@ public final class NettyRequestSender {
             return future;
         }
 
-        RequestNameResolver.INSTANCE.resolve(request, proxy, asyncHandler)//
-                .addListener(new SimpleGenericFutureListener<List<InetSocketAddress>>() {
+        RequestHostnameResolver.INSTANCE.resolve(request, proxy, asyncHandler)//
+                .addListener(new SimpleFutureListener<List<InetSocketAddress>>() {
 
                     @Override
                     protected void onSuccess(List<InetSocketAddress> addresses) {
@@ -298,7 +302,7 @@ public final class NettyRequestSender {
                 asyncHandler,//
                 nettyRequest,//
                 config.getMaxRequestRetry(),//
-                request.getConnectionPoolPartitioning(),//
+                request.getChannelPoolPartitioning(),//
                 proxyServer);
 
         String expectHeader = request.getHeaders().get(HttpHeaders.Names.EXPECT);
@@ -323,14 +327,18 @@ public final class NettyRequestSender {
             if (handler instanceof TransferCompletionHandler)
                 configureTransferAdapter(handler, httpRequest);
 
+            boolean writeBody = !future.isDontWriteBodyBecauseExpectContinue() && httpRequest.getMethod() != HttpMethod.CONNECT && nettyRequest.getBody() != null;
+
             if (!future.isHeadersAlreadyWrittenOnContinue()) {
                 if (future.getAsyncHandler() instanceof AsyncHandlerExtensions)
                     AsyncHandlerExtensions.class.cast(future.getAsyncHandler()).onRequestSend(nettyRequest);
 
-                channel.writeAndFlush(httpRequest, channel.newProgressivePromise()).addListener(new ProgressListener(future.getAsyncHandler(), future, true, 0L));
+                ChannelProgressivePromise promise = channel.newProgressivePromise();
+                ChannelFuture f = writeBody ? channel.write(httpRequest, promise) : channel.writeAndFlush(httpRequest, promise);
+                f.addListener(new ProgressListener(future.getAsyncHandler(), future, true, 0L));
             }
 
-            if (!future.isDontWriteBodyBecauseExpectContinue() && httpRequest.getMethod() != HttpMethod.CONNECT && nettyRequest.getBody() != null)
+            if (writeBody)
                 nettyRequest.getBody().write(channel, future);
 
             // don't bother scheduling timeouts if channel became invalid
@@ -344,7 +352,7 @@ public final class NettyRequestSender {
     }
 
     private void configureTransferAdapter(AsyncHandler<?> handler, HttpRequest httpRequest) {
-        HttpHeaders h = new DefaultHttpHeaders().set(httpRequest.headers());
+        HttpHeaders h = new DefaultHttpHeaders(false).set(httpRequest.headers());
         TransferCompletionHandler.class.cast(handler).headers(h);
     }
 
@@ -387,9 +395,8 @@ public final class NettyRequestSender {
     public void handleUnexpectedClosedChannel(Channel channel, NettyResponseFuture<?> future) {
         if (future.isDone())
             channelManager.closeChannel(channel);
-
         else if (!retry(future))
-            abort(channel, future, REMOTELY_CLOSED_EXCEPTION);
+            abort(channel, future, RemotelyClosedException.INSTANCE);
     }
 
     public boolean retry(NettyResponseFuture<?> future) {
@@ -398,6 +405,7 @@ public final class NettyRequestSender {
             return false;
 
         if (future.canBeReplayed()) {
+            // FIXME should we set future.setReuseChannel(false); ?
             future.setChannelState(ChannelState.RECONNECTED);
             future.getAndSetStatusReceived(false);
 
@@ -443,6 +451,8 @@ public final class NettyRequestSender {
     }
 
     public <T> void sendNextRequest(final Request request, final NettyResponseFuture<T> future) {
+        // remove attribute in case the channel gets closed so it doesn't try to recover the previous future
+        Channels.setAttribute(future.channel(), null);
         sendRequest(request, future.getAsyncHandler(), future, true);
     }
 
@@ -452,7 +462,7 @@ public final class NettyRequestSender {
         if (asyncHandler instanceof WebSocketUpgradeHandler) {
             if (!isWs)
                 throw new IllegalArgumentException("WebSocketUpgradeHandler but scheme isn't ws or wss: " + uri.getScheme());
-            else if (!request.getMethod().equals(HttpMethod.GET.name()))
+            else if (!request.getMethod().equals(GET))
                 throw new IllegalArgumentException("WebSocketUpgradeHandler but method isn't GET: " + request.getMethod());
         } else if (isWs) {
             throw new IllegalArgumentException("No WebSocketUpgradeHandler but scheme is " + uri.getScheme());
@@ -462,11 +472,11 @@ public final class NettyRequestSender {
     private Channel pollPooledChannel(Request request, ProxyServer proxy, AsyncHandler<?> asyncHandler) {
 
         if (asyncHandler instanceof AsyncHandlerExtensions)
-            AsyncHandlerExtensions.class.cast(asyncHandler).onConnectionPool();
+            AsyncHandlerExtensions.class.cast(asyncHandler).onConnectionPoolAttempt();
 
         Uri uri = request.getUri();
         String virtualHost = request.getVirtualHost();
-        final Channel channel = channelManager.poll(uri, virtualHost, proxy, request.getConnectionPoolPartitioning());
+        final Channel channel = channelManager.poll(uri, virtualHost, proxy, request.getChannelPoolPartitioning());
 
         if (channel != null) {
             LOGGER.debug("Using polled Channel {}\n for uri {}\n", channel, uri);

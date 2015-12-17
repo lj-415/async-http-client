@@ -31,14 +31,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.net.ssl.SSLHandshakeException;
 import javax.servlet.http.HttpServletResponse;
 
-import org.asynchttpclient.channel.pool.KeepAliveStrategy;
+import org.asynchttpclient.channel.KeepAliveStrategy;
 import org.asynchttpclient.test.EventCollectingHandler;
 import org.testng.annotations.Test;
 
 public class BasicHttpsTest extends AbstractBasicHttpsTest {
 
     protected String getTargetUrl() {
-        return String.format("https://127.0.0.1:%d/foo/test", port1);
+        return String.format("https://localhost:%d/foo/test", port1);
     }
 
     @Test(groups = "standalone")
@@ -138,8 +138,8 @@ public class BasicHttpsTest extends AbstractBasicHttpsTest {
 
             Object[] expectedEvents = new Object[] { //
             CONNECTION_POOL_EVENT,//
-                    DNS_RESOLUTION_EVENT,//
-                    DNS_RESOLUTION_SUCCESS_EVENT,//
+                    HOSTNAME_RESOLUTION_EVENT,//
+                    HOSTNAME_RESOLUTION_SUCCESS_EVENT,//
                     CONNECTION_OPEN_EVENT,//
                     CONNECTION_SUCCESS_EVENT,//
                     TLS_HANDSHAKE_EVENT,//
